@@ -1,0 +1,145 @@
+---
+title: "Task2 Analysis"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(ggplot2)
+library(rjson)
+library(rvest)
+library(stringr)
+library(dplyr)
+library(plotly)
+
+```
+
+
+###Import csv
+### I have converted the json file into csv for later data analysis.
+### Since Excel automatically convert positionTS column into scientific notation, I have to extract data from json file which related to timestamp and save it as the 'positionTS' column.
+```{r}
+df<-read.csv("positionTS.csv")
+```
+
+# I mutate the"positionTS" column to get rid of unecessary information.
+```{r}
+df<-
+  df %>% 
+  mutate(positionTS=str_replace(positionTS,'"positionTS":',"")) %>% 
+  mutate(positionTS=str_replace(positionTS,',',""))
+```
+
+### Converting original timestamp data into more readable format.
+```{r}
+z<-as.numeric(df[,"positionTS"])
+z<-as.POSIXct((z+0.1)/1000, origin = "1970-01-01")
+df[,"positionTS"]<-z
+```
+
+###Clean column names
+```{r}
+df<-
+  df %>% 
+ janitor::clean_names()
+```
+
+
+
+
+## The records of this dataset were collected between"2017-01-24 10:49:15 EST"  and "2017-01-24 11:08:16 EST"
+```{r}
+range(df$position_ts)
+```
+
+
+## Does every tag being detected at same frequency? Are the number of detections for each tag equivalent to each other?
+## Does every tag being detected during the same period of time? When?
+
+```{r}
+tbl_freq_detected=df %>% 
+  group_by(id,name) %>% 
+  summarize(n=n())
+tbl_freq_detected
+```
+### According to table shown above,most tags has been detected morethan 5000 times whereas a small amount of tags were detected less than 300 times.
+
+##Does it mean that some tags were detected in shorter period? Let's check out the timeslot between first detection and last detection for each period.
+```{r}
+tbl_interval_detection=df %>% 
+  group_by(id,name) %>% 
+  summarize(start=min(position_ts),end=max(position_ts))
+
+tbl_interval_detection
+```
+###According to the table 'tbl_interval_detection', we found that the interval for each tag is about the same.Starting from around 10:49AM and ends around 11:08AM.
+
+##Maybe tags are detected at different frequencies?
+###Let's plot ID vs. Timestamp for each ID tag to get a bigger picture.
+###Plotly View enable us to determine the exact timestamp of ID tag in our graph.
+```{r}
+ggplot_timestamp=df %>% 
+  ggplot(aes(x = id, y = position_ts, ymin = min(position_ts), 
+             ymax = max(position_ts))) +
+    geom_point(size=0.08) +
+    theme(axis.text.x = element_text(angle = 90,size = 8)) +
+  theme(legend.position = "none")+
+  labs(x="ID",y="Timestamp",title="ID tag v.s Timestamp") 
+
+ggplotly(ggplot_timestamp)
+```
+###According the the "ggplot_timestamp", we found that several tags were not detected as frequently as most of others.
+
+
+##What about location plots for each tag?
+### Since all values in smooth_position_003(z-coordinate) are zero, I plot 2D diagram instead of 3D
+###By clicking id on the right, we can observe the x and y positions for specific ID independently. 
+```{r}
+library(plotly)
+library(tidyverse)
+library(viridis)
+scatter_position=df %>%
+  ggplot(aes(x = smoothed_position_001, y = smoothed_position_002, color = id)) +
+  geom_point(alpha = 0.15) +
+  theme_classic()
+
+ggplotly(scatter_position)
+
+```
+
+
+```{r}
+df%>% 
+  ggplot(aes(x =position_ts,y=position_accuracy,color=id)) + 
+  geom_point()+
+  geom_line()
+```
+
+
+Mean of PositionAccuracy By Tag ID (26 Distinct)
+```{r}
+position_accuracy=df %>% 
+  group_by(id,name) %>% 
+  summarize(avg_accuracy= mean(position_accuracy))
+
+position_accuracy %>% 
+  ggplot(aes(x=name,y=avg_accuracy,color=id))+
+  geom_point()
+```
+
+
+
+
+There are 4 different colored tags.
+```{r}
+df %>% 
+  group_by(color) %>% 
+  summarize(avg= mean(position_accuracy)) %>% 
+  View()
+```
+
+
+
